@@ -59,6 +59,3 @@ class LoginSerializer(serializers.Serializer):
 
         data['user'] = user
         return data        
-
-class ResetPasswordRequestSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)

@@ -40,10 +40,10 @@ class LoginView(APIView):
         """
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
-          user = serializer.validated_data['user']
-          token, created = Token.objects.get_or_create(user=user)
-          print('token',token)
-          return Response({'token': token.key, 'username': user.username, 'user_id': user.id}, status=status.HTTP_200_OK)
+            user = serializer.validated_data['user']
+            token, created = Token.objects.get_or_create(user=user)
+            print('token',token)
+            return Response({'token': token.key, 'username': user.username, 'user_id': user.id}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -86,23 +86,22 @@ class RequestPasswordReset(APIView):
             reset.save()
 
             reset_url = reverse('password_reset_token', kwargs={'token': token})
-            print("reset_url", reset_url)
             relative_reset_url = reset_url.replace('/api', '')
-            print("relative_reset_url", relative_reset_url)
             domain_url = os.getenv('REDIRECT_LANDING')
-            print("domain_url", domain_url)
             full_url = f'{domain_url}/reset-password.html?token={token}'
-            print("full_url", full_url)
+            prod_frontend_url = os.getenv('PROD_FRONTEND_URL')
             subject = "Coderr Passwort zurücksetzen"
             text_content = render_to_string('emails/forgot_password.txt', {
                 'username': user.username, 
                 'full_url': full_url,
                 'domain_url': domain_url,
+                'prod_frontend_url': prod_frontend_url,
             })
             html_content = render_to_string('emails/forgot_password.html', {
                 'username': user.username, 
                 'full_url': full_url,
                 'domain_url': domain_url,
+                'prod_frontend_url': prod_frontend_url,
             })
             email = EmailMultiAlternatives(
                 subject,
