@@ -48,4 +48,3 @@ class CustomProfileSerializer(serializers.ModelSerializer):
             'user', 'file', 'location', 'tel', 
             'description', 'working_hours', 'type'
         ]
-
