@@ -20,7 +20,6 @@ class OfferSerializer(serializers.ModelSerializer):
     details = OfferDetailSerializer(many=True)
     min_price = serializers.SerializerMethodField()
     min_delivery_time = serializers.SerializerMethodField()
-    user = serializers.IntegerField(source='id')
     class Meta:
         model = Offer
         fields = [
