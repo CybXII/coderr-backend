@@ -77,6 +77,8 @@ class OfferAPIView(APIView):
             result_page = paginator.paginate_queryset(offers, request)
             serializer = OfferSerializer(result_page, many=True)
             return paginator.get_paginated_response(serializer.data)
+
+
     def post(self, request):
         if request.user.type != 'business':
             return Response(
@@ -99,6 +101,7 @@ class OfferAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Angebot erstellen
         offer = Offer.objects.create(
             user=request.user,
             title=data.get('title'),
@@ -106,14 +109,34 @@ class OfferAPIView(APIView):
             image=data.get('image'),
         )
 
+        created_details = []  # Liste für erstellte OfferDetail-Objekte
         for detail_data in details:
-            if detail_data.get('revisions', 0) < -1:
+            # Konvertiere 'revisions' in Integer
+            try:
+                revisions = int(detail_data.get('revisions', 0))
+            except ValueError:
+                return Response(
+                    {'error': 'Revisions muss eine Ganzzahl sein.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Überprüfe den konvertierten Wert
+            if revisions < -1:
                 return Response(
                     {'error': 'Revisions müssen -1 (unbegrenzt) oder größer sein.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            if detail_data.get('delivery_time_in_days', 0) <= 0:
+            # Konvertiere 'delivery_time_in_days' in Integer
+            try:
+                delivery_time_in_days = int(detail_data.get('delivery_time_in_days', 0))
+            except ValueError:
+                return Response(
+                    {'error': 'Die Lieferzeit muss eine Ganzzahl sein.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if delivery_time_in_days <= 0:
                 return Response(
                     {'error': 'Die Lieferzeit muss ein positiver Wert sein.'},
                     status=status.HTTP_400_BAD_REQUEST
@@ -125,21 +148,131 @@ class OfferAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            OfferDetail.objects.create(
+            offer_detail = OfferDetail.objects.create(
                 offer=offer,
                 title=detail_data.get('title'),
-                revisions=detail_data.get('revisions'),
-                delivery_time_in_days=detail_data.get('delivery_time_in_days'),
+                revisions=revisions,
+                delivery_time_in_days=delivery_time_in_days,
                 price=detail_data.get('price'),
                 features=detail_data.get('features'),
                 offer_type=detail_data.get('offer_type'),
             )
+            created_details.append(offer_detail)
 
+        # Serialisiere die erstellten Angebotsdetails
+        details_serializer = OfferDetailSerializer(created_details, many=True)
+
+        # Rückgabe mit allen Angebotsdetails
         return Response({
             "id": offer.id,
             "title": offer.title,
             "description": offer.description,
+            "details": details_serializer.data,  # Alle Details hier inkludiert
         }, status=status.HTTP_201_CREATED)
+
+    def delete(self, request, pk=None):
+        if not pk:
+            return Response(
+                {'error': 'Ein Angebots-ID muss angegeben werden.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Angebot abrufen
+            offer = Offer.objects.get(pk=pk)
+        except Offer.DoesNotExist:
+            return Response(
+                {'error': 'Angebot nicht gefunden.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Überprüfen, ob der Benutzer der Ersteller des Angebots ist
+        if offer.user != request.user:
+            return Response(
+                {'error': 'Nicht autorisiert, dieses Angebot zu löschen.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Angebot löschen
+        offer.delete()
+        return Response(
+            {'message': f'Angebot mit ID {pk} wurde erfolgreich gelöscht.'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+        
+    def patch(self, request, pk=None):
+        if not pk:
+            return Response(
+                {'error': 'Ein Angebots-ID muss angegeben werden.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Angebot abrufen
+            offer = Offer.objects.get(pk=pk)
+        except Offer.DoesNotExist:
+            return Response(
+                {'error': 'Angebot nicht gefunden.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Überprüfen, ob der Benutzer berechtigt ist, das Angebot zu bearbeiten
+        if offer.user != request.user:
+            return Response(
+                {'error': 'Nicht autorisiert, dieses Angebot zu bearbeiten.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Hauptdaten des Angebots aktualisieren
+        offer.title = request.data.get('title', offer.title)
+        offer.description = request.data.get('description', offer.description)
+
+        # Überprüfen, ob ein neues Bild hochgeladen wurde
+        if 'image' in request.data:
+            offer.image = request.data.get('image')
+
+        offer.save()
+
+        # Details aktualisieren
+        details = request.data.get('details', [])
+        if details:
+            for detail_data in details:
+                detail_id = detail_data.get('id')
+
+                try:
+                    # Detail abrufen oder neu erstellen
+                    if detail_id:
+                        detail = OfferDetail.objects.get(pk=detail_id, offer=offer)
+                    else:
+                        detail = OfferDetail(offer=offer)
+
+                    # Detailwerte aktualisieren
+                    detail.title = detail_data.get('title', detail.title)
+                    detail.revisions = int(detail_data.get('revisions', detail.revisions))
+                    detail.delivery_time_in_days = int(detail_data.get('delivery_time_in_days', detail.delivery_time_in_days))
+                    detail.price = detail_data.get('price', detail.price)
+                    detail.features = detail_data.get('features', detail.features)
+                    detail.offer_type = detail_data.get('offer_type', detail.offer_type)
+
+                    detail.save()
+
+                except OfferDetail.DoesNotExist:
+                    return Response(
+                        {'error': f'Angebotsdetail mit ID {detail_id} nicht gefunden.'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                except ValueError as e:
+                    return Response(
+                        {'error': f'Fehler beim Aktualisieren der Details: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+        # Erfolgsmeldung zurückgeben
+        return Response(
+            {'message': f'Angebot mit ID {pk} wurde erfolgreich aktualisiert.'},
+            status=status.HTTP_200_OK
+        )
+
 
 class OfferDetailView(APIView):
     authentication_classes = [TokenAuthentication]
