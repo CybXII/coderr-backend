@@ -51,7 +51,6 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 DOMAIN_NAME = os.getenv('DOMAIN_NAME')
 BACKEND_URL = os.getenv('BACKEND_URL')
-
 # Application definition
 
 INSTALLED_APPS = [
